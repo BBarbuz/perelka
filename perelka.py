@@ -31,6 +31,7 @@ import subprocess
 import sys
 import time
 import unicodedata
+from functools import lru_cache
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -89,6 +90,68 @@ ALIASY = [
 ]
 
 
+# Długie nazwy, w których sprzedający często robią literówki ("Playsation", "Nitendo").
+# Poprawiane są tylko słowa zaczynające się tą samą literą i o podobnej długości.
+SLOWNIK_LITEROWEK = ["playstation", "nintendo", "dualsense", "samsung", "macbook", "thinkpad",
+                     "motorola", "steamdeck"]
+
+
+@lru_cache(maxsize=None)
+def odleglosc(a: str, b: str) -> int:
+    """Odległość edycyjna z zamianą sąsiednich liter (Damerau-Levenshtein, wariant OSA)."""
+    if abs(len(a) - len(b)) > 2:
+        return 3
+    d = [[0] * (len(b) + 1) for _ in range(len(a) + 1)]
+    for i in range(len(a) + 1):
+        d[i][0] = i
+    for j in range(len(b) + 1):
+        d[0][j] = j
+    for i in range(1, len(a) + 1):
+        for j in range(1, len(b) + 1):
+            koszt = a[i - 1] != b[j - 1]
+            d[i][j] = min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + koszt)
+            if i > 1 and j > 1 and a[i - 1] == b[j - 2] and a[i - 2] == b[j - 1]:
+                d[i][j] = min(d[i][j], d[i - 2][j - 2] + 1)
+    return d[len(a)][len(b)]
+
+
+def dopuszczalna_literowka(slowo: str) -> int:
+    """Ile pomyłek tolerujemy: krótkie słowa i liczby/modele (ps5, 13, s23) — żadnych."""
+    if not slowo.isalpha() or len(slowo) < 7:
+        return 0
+    return 1 if len(slowo) < 10 else 2
+
+
+def literowka(token: str, wzor: str) -> bool:
+    n = dopuszczalna_literowka(wzor)
+    return (n > 0 and token.isalpha() and token[0] == wzor[0]
+            and odleglosc(token, wzor) <= n)
+
+
+@lru_cache(maxsize=4096)
+def _popraw_slowo(tok: str) -> str:
+    for w in SLOWNIK_LITEROWEK:
+        if tok != w and literowka(tok, w):
+            return w
+    return tok
+
+
+def popraw_literowki(t: str) -> str:
+    toks = t.split()
+    wynik, i = [], 0
+    while i < len(toks):
+        # "play staton" -> "playstation"
+        if i + 1 < len(toks) and toks[i] in ("play", "plai", "pley"):
+            sklejone = _popraw_slowo(toks[i] + toks[i + 1])
+            if sklejone in SLOWNIK_LITEROWEK:
+                wynik.append(sklejone)
+                i += 2
+                continue
+        wynik.append(_popraw_slowo(toks[i]))
+        i += 1
+    return " ".join(wynik)
+
+
 def _podstawowa(tekst: str, wzorzec: bool = False) -> str:
     t = tekst.lower().translate(_PL)
     if not wzorzec:
@@ -97,6 +160,8 @@ def _podstawowa(tekst: str, wzorzec: bool = False) -> str:
     t = "".join(z for z in t if not unicodedata.combining(z))
     t = t.replace("+", " + ").replace("&", " + ")
     t = re.sub(r"[^a-z0-9+*]+", " ", t)
+    if not wzorzec:
+        t = popraw_literowki(t)
     for wzor, zamiana in ALIASY:
         t = re.sub(wzor, zamiana, t)
     return t
@@ -140,12 +205,15 @@ def _slowo_pasuje(token: str, wzor: str) -> bool:
     return token == wzor
 
 
-def znajdz(toks: list[str], fraza: list[str], start: int = 0, negacja: bool = False) -> int:
+def znajdz(toks: list[str], fraza: list[str], start: int = 0, negacja: bool = False,
+           literowki: bool = False) -> int:
     """Indeks pierwszego wystąpienia frazy w tokenach albo -1.
-    Przy negacja=True pomija wystąpienia poprzedzone słowem "nie"/"bez"."""
+    Przy negacja=True pomija wystąpienia poprzedzone słowem "nie"/"bez".
+    Przy literowki=True długie słowa mogą mieć 1–2 pomyłki ("nintedno" = "nintendo")."""
     n = len(fraza)
     for i in range(start, len(toks) - n + 1):
-        if all(_slowo_pasuje(toks[i + j], fraza[j]) for j in range(n)):
+        if all(_slowo_pasuje(toks[i + j], fraza[j])
+               or (literowki and literowka(toks[i + j], fraza[j])) for j in range(n)):
             if negacja and i > 0 and toks[i - 1] in ("nie", "bez"):
                 continue
             return i
@@ -308,7 +376,7 @@ class Filtr:
         # 1. Wszystkie frazy z zapytania muszą być w tytule.
         poczatek, koniec = None, None
         for f in self.frazy:
-            i = znajdz(toks, f)
+            i = znajdz(toks, f, literowki=True)
             if i < 0:
                 return False, f"brak słowa „{' '.join(f)}”"
             if poczatek is None or i < poczatek:

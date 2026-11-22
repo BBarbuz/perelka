@@ -101,6 +101,9 @@ To samo z powiadomieniami na pulpicie (GNOME, `notify-send`):
 ### Jak działa filtr słów kluczowych
 
 1. Wszystkie słowa z zapytania muszą być w tytule (`PS5`, `PS 5`, `PlayStation 5` są traktowane tak samo).
+   Literówki w długich słowach są tolerowane: „Playsation 5”, „Play Staton 5”, „Nitendo Switch”
+   (1 pomyłka w słowach od 7 liter, 2 od 10 liter). Liczby i krótkie słowa muszą być dokładne,
+   więc „PS4” nigdy nie pasuje do „PS5”, a „iPhone 12” do „iPhone 13”.
 2. Odrzucane są zawsze: kupno/skup, uszkodzone/na części, blokady, atrapy, wynajem, „samo pudełko”.
 3. Jeśli **przed** nazwą stoi akcesorium albo przyimek („**Pad** DualSense PS5”, „Etui **na** PS5”) — odrzucone.
    Wyjątek: najpierw pada słowo typu „konsola” („Konsola do gier PS5”).

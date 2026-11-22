@@ -91,6 +91,30 @@ class TestFiltrTelefon(unittest.TestCase):
         self.assertFalse(g.sprawdz("Iphone 13 ProMax 256GB")[0])
 
 
+class TestLiterowki(unittest.TestCase):
+    def test_playstation(self):
+        f = p.Filtr("ps5", "konsola", [], [])
+        for t in ["Playsation 5 FAT", "Playstaion 5 slim", "Plasytation 5", "PlayStaytion 5",
+                  "Play Staton 5 digital", "Konsola Playstatin 5"]:
+            self.assertTrue(f.sprawdz(t)[0], t)
+
+    def test_bez_falszywych_dopasowan(self):
+        f = p.Filtr("ps5", "konsola", [], [])
+        self.assertFalse(f.sprawdz("Playsation 4 slim")[0])  # inny model
+        self.assertFalse(f.sprawdz("PS4 slim")[0])
+        g = p.Filtr("iphone 13", "telefon", [], [])
+        self.assertFalse(g.sprawdz("iPhone 12")[0])  # liczby bez tolerancji
+        h = p.Filtr("switch", "konsola", [], [])
+        self.assertFalse(h.sprawdz("Stitch maskotka")[0])  # krótkie słowa bez tolerancji
+
+    def test_literowka_w_zapytaniu_i_tytule(self):
+        f = p.Filtr("nintendo switch", "konsola", [], [])
+        self.assertTrue(f.sprawdz("Nintedno Switch OLED")[0])
+        self.assertTrue(f.sprawdz("Nitendo Switch Lite")[0])
+        g = p.Filtr("steam deck", "konsola", [], [])
+        self.assertTrue(g.sprawdz("Steam Deck OLED 512GB")[0])
+
+
 class TestFiltrCenowy(unittest.TestCase):
     def test_gry_bez_slowa_gra(self):
         f = p.Filtr("ps5", "konsola", [], [])
